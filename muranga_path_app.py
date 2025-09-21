@@ -25,16 +25,16 @@ for coord in st.session_state.coords:
 if len(st.session_state.coords) >= 2:
     folium.PolyLine(st.session_state.coords, color="blue").add_to(m)
 
-# Display map
+# Display map and capture click
 map_data = st_folium(m, width=700, height=500)
 
-# Capture click
+# Capture click safely
 if map_data and map_data.get("last_clicked"):
     click = map_data["last_clicked"]
     coord = [click["lat"], click["lng"]]
     if coord not in st.session_state.coords:
         st.session_state.coords.append(coord)
-        st.experimental_rerun()  # Refresh map with new point
+        st.success(f"Point added: {coord}")
 
 # Save button
 if st.button("Save Path"):
