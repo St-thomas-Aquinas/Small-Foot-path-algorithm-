@@ -5,27 +5,25 @@ import json
 from geopy.distance import geodesic
 import random
 
-# --- Session state initialization ---
-if 'paths' not in st.session_state or not isinstance(st.session_state.paths, dict):
+st.set_page_config(layout="wide")
+
+# --- Initialize session state ---
+if 'paths' not in st.session_state:
     st.session_state.paths = {}  # path_name -> list of coordinates
-if 'current_path' not in st.session_state or not isinstance(st.session_state.current_path, list):
+if 'current_path' not in st.session_state:
     st.session_state.current_path = []
-if 'path_name' not in st.session_state or not isinstance(st.session_state.path_name, str):
+if 'path_name' not in st.session_state:
     st.session_state.path_name = ''
-if 'path_colors' not in st.session_state or not isinstance(st.session_state.path_colors, dict):
-    st.session_state.path_colors = {}  # path_name -> color
+if 'path_colors' not in st.session_state:
+    st.session_state.path_colors = {}
 
 st.title("Path Collector - Murang'a University")
 
 # --- Path name input ---
 st.session_state.path_name = st.text_input("Enter Path Name:", st.session_state.path_name)
 
-# --- Create Folium Map centered around Murang'a University ---
-m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17)
-
-# --- Interpolation helper function ---
+# --- Interpolation helper ---
 def interpolate_points(p1, p2, interval_m=10):
-    """Return list of points between p1 and p2 every interval_m meters"""
     points = [p1]
     dist = geodesic(p1, p2).meters
     if dist <= interval_m:
@@ -41,31 +39,35 @@ def interpolate_points(p1, p2, interval_m=10):
     points.append(p2)
     return points
 
-# --- Click event handling ---
-click = st_folium(m, width=700, height=500, returned_objects=["last_clicked"])
-if click and click["last_clicked"]:
-    point = [click["last_clicked"]["lat"], click["last_clicked"]["lng"]]
-    if st.session_state.current_path:
-        # Interpolate with previous point
-        last_point = st.session_state.current_path[-1]
-        interp = interpolate_points(last_point, point)
-        st.session_state.current_path.extend(interp[1:])  # avoid duplicate
-    else:
-        st.session_state.current_path.append(point)
+# --- Create map ---
+m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17)
+
+# --- Draw saved paths ---
+for name, pts in st.session_state.paths.items():
+    c = st.session_state.path_colors.get(name, "#0000FF")
+    folium.PolyLine(pts, color=c, weight=4, opacity=0.7).add_to(m)
+    for pt in pts:
+        folium.CircleMarker(location=pt, radius=3, color=c).add_to(m)
 
 # --- Draw current path ---
 if st.session_state.current_path:
     color = st.session_state.path_colors.get(st.session_state.path_name, "#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6)]))
     st.session_state.path_colors[st.session_state.path_name] = color
     folium.PolyLine(st.session_state.current_path, color=color, weight=5).add_to(m)
-    # Add markers for points
     for pt in st.session_state.current_path:
         folium.CircleMarker(location=pt, radius=3, color=color).add_to(m)
 
-# --- Draw saved paths ---
-for name, pts in st.session_state.paths.items():
-    c = st.session_state.path_colors.get(name, "#0000FF")
-    folium.PolyLine(pts, color=c, weight=4, opacity=0.7).add_to(m)
+# --- Capture click ---
+clicked = st_folium(m, width=800, height=500)
+if clicked and clicked.get("last_clicked"):
+    point = [clicked["last_clicked"]["lat"], clicked["last_clicked"]["lng"]]
+    if st.session_state.current_path:
+        last_point = st.session_state.current_path[-1]
+        interp = interpolate_points(last_point, point)
+        st.session_state.current_path.extend(interp[1:])  # avoid duplicate
+    else:
+        st.session_state.current_path.append(point)
+    st.experimental_rerun()  # re-render map with new point
 
 # --- Buttons ---
 col1, col2 = st.columns(2)
