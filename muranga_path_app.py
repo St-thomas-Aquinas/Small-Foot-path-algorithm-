@@ -1,86 +1,49 @@
+# streamlit_app.py
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-import math
+import json
 
-# ---------------------------
-# Your path data
-# ---------------------------
-data = {
-  "path_segments": [
-    {"id": 1, "coordinates":[[-0.7159173329483964,37.1470061058908],[-0.7158174284628951,37.14693972121571],[-0.715769152469106,37.146941062320245],[-0.715749037471556,37.14698867153169],[-0.7157295929738374,37.14701549362263]]},
-    {"id": 2, "coordinates":[[-0.7156289064120767,37.14770603387747],[-0.7155464349190112,37.14772279768338],[-0.7154726799239701,37.14772816210127]]},
-    {"id": 3, "coordinates":[[-0.7151593339897789,37.14730315395433],[-0.7151398894895541,37.14741848893893],[-0.7151123989891006,37.147484873610296],[-0.7150956364876797,37.14752242453748],[-0.7150621114867844,37.14759685583568],[-0.7150091419794686,37.14759551473958],[-0.7149742759778673,37.147702803097346],[-0.7149407509760816,37.14775778838071],[-0.7149025324737585,37.147796680410394],[-0.7148623024709488,37.1478060681417]]},
-    {"id": 4, "coordinates":[[-0.7151050234833092,37.147429888327835],[-0.7150259044809658,37.14735948034305],[-0.7149675709758258,37.14734472819352],[-0.7149105784723714,37.14748017974782],[-0.7148759749861965,37.147669032233495],[-0.7148551894846676,37.14777967335244],[-0.7148451319840161,37.14780716599618],[-0.7148397679835966,37.14785946907059]]},
-    {"id": 5, "coordinates":[[-0.7166485179316855,37.1473719887538],[-0.7164627894856782,37.14752554521619],[-0.7163226550205727,37.14766367897693],[-0.7162395130364033,37.147847410295974],[-0.7161831910480342,37.147952686997165]]},
-    {"id": 6, "coordinates":[[-0.7164414558818964,37.147293068328466],[-0.7164381033827903,37.147371522940084],[-0.7164159768884178,37.14745936528369],[-0.7163703410713396,37.14755953954871],[-0.7163046320870738,37.14767085122006],[-0.7162375821027,37.147708402145284],[-0.71615913361833,37.14768895613207],[-0.7160867196328624,37.14764671134121],[-0.7160605701371224,37.147680909505546],[-0.7160230221429892,37.14774997638707],[-0.7159941906470713,37.14779959725336]]},
-    {"id": 7, "coordinates":[[-0.716133654619241,37.14758636163903],[-0.7160431371367479,37.147526682490025],[-0.7160337501384468,37.147434816833695],[-0.7160853786287977,37.14734362172959]]},
-    {"id": 8, "coordinates":[[-0.7156133466874832,37.14711630451362],[-0.7157280021757636,37.14721554624455],[-0.7157952879594769,37.14725913078142],[-0.7158502689527123,37.147304057781724]]},
-    {"id": 9, "coordinates":[[-0.7167094736209859,37.14738780402697],[-0.7166967341244566,37.1475467249106],[-0.716643094140362,37.14777605378032],[-0.7165941476549472,37.147957773440375],[-0.7165552586654131,37.14811065935458],[-0.7165565996639691,37.14827829741657],[-0.7165800671564269,37.14829103791316]]},
-    {"id": 10, "coordinates":[[-0.7162825168596509,37.14856698101218],[-0.7162268653724236,37.1484724331469],[-0.7161993748779878,37.14837520306884],[-0.7161591448851905,37.14826925581244],[-0.7162060798755638,37.148125087076735],[-0.7159392209226174,37.14794940238767]]},
-    {"id": 11, "coordinates":[[-0.7161351101733997,37.148238060655466],[-0.7158689217157937,37.14807109314646]]}
-  ]
-}
+st.title("Path Collector - Murang'a University")
 
-# ---------------------------
-# Helper: distance between points
-# ---------------------------
-def distance(p1, p2):
-    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+# Input for path name
+path_name = st.text_input("Enter Path Name:")
 
-# ---------------------------
-# Map
-# ---------------------------
-m = folium.Map(location=[-0.716, 37.147], zoom_start=17)
+# Initialize session state for coordinates
+if "coords" not in st.session_state:
+    st.session_state.coords = []
 
-# Draw all paths
-for seg in data['path_segments']:
-    folium.PolyLine(seg['coordinates'], color='blue', weight=5).add_to(m)
+st.write("Click points on the map to collect coordinates:")
 
-# ---------------------------
-# Streamlit display
-# ---------------------------
-st.title("Murang'a University Route Finder")
-st.write("Click on the map to select start and end points.")
+# Create map centered at Murang'a University
+m = folium.Map(location=[-0.716, 37.147], zoom_start=18)
 
-clicked = st_folium(m, width=700, height=500)
+# Add existing coordinates as markers
+for coord in st.session_state.coords:
+    folium.Marker(coord).add_to(m)
+folium.PolyLine(st.session_state.coords, color="blue").add_to(m)
 
-if 'start' not in st.session_state:
-    st.session_state['start'] = None
-if 'end' not in st.session_state:
-    st.session_state['end'] = None
+# Display map
+map_data = st_folium(m, width=700, height=500)
 
-if clicked['last_clicked']:
-    point = (clicked['last_clicked']['lat'], clicked['last_clicked']['lng'])
-    if st.session_state['start'] is None:
-        st.session_state['start'] = point
-        st.write(f"Start point: {point}")
-    elif st.session_state['end'] is None:
-        st.session_state['end'] = point
-        st.write(f"End point: {point}")
+# Capture click
+if map_data and map_data.get("last_clicked"):
+    click = map_data["last_clicked"]
+    coord = [click["lat"], click["lng"]]
+    if coord not in st.session_state.coords:
+        st.session_state.coords.append(coord)
+        st.experimental_rerun()  # Refresh map with new point
 
-# ---------------------------
-# Plot route (nearest points)
-# ---------------------------
-def nearest_point(point, segments):
-    nearest = None
-    min_dist = float('inf')
-    for seg in segments:
-        for coord in seg['coordinates']:
-            d = distance(point, coord)
-            if d < min_dist:
-                min_dist = d
-                nearest = coord
-    return nearest
-
-if st.session_state['start'] and st.session_state['end']:
-    start_nearest = nearest_point(st.session_state['start'], data['path_segments'])
-    end_nearest = nearest_point(st.session_state['end'], data['path_segments'])
-    
-    folium.Marker(location=start_nearest, icon=folium.Icon(color='green'), popup="Start").add_to(m)
-    folium.Marker(location=end_nearest, icon=folium.Icon(color='red'), popup="End").add_to(m)
-    
-    folium.PolyLine([start_nearest, end_nearest], color='orange', weight=4, dash_array="5").add_to(m)
-    
-    # Refresh map with route
-    st_folium(m, width=700, height=500)
+# Save button
+if st.button("Save Path"):
+    if path_name and st.session_state.coords:
+        path_data = {
+            "path_name": path_name,
+            "coordinates": st.session_state.coords
+        }
+        st.code(json.dumps(path_data, indent=4))
+        st.success("Path saved!")
+        # Optionally clear coordinates for next path
+        st.session_state.coords = []
+    else:
+        st.warning("Add points and enter a path name before saving.")
