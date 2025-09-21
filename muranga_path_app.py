@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
@@ -21,7 +20,10 @@ m = folium.Map(location=[-0.716, 37.147], zoom_start=18)
 # Add existing coordinates as markers
 for coord in st.session_state.coords:
     folium.Marker(coord).add_to(m)
-folium.PolyLine(st.session_state.coords, color="blue").add_to(m)
+
+# Only draw polyline if there are 2 or more points
+if len(st.session_state.coords) >= 2:
+    folium.PolyLine(st.session_state.coords, color="blue").add_to(m)
 
 # Display map
 map_data = st_folium(m, width=700, height=500)
@@ -43,7 +45,6 @@ if st.button("Save Path"):
         }
         st.code(json.dumps(path_data, indent=4))
         st.success("Path saved!")
-        # Optionally clear coordinates for next path
-        st.session_state.coords = []
+        st.session_state.coords = []  # clear for next path
     else:
         st.warning("Add points and enter a path name before saving.")
