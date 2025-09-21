@@ -3,95 +3,107 @@ import folium
 from streamlit_folium import st_folium
 import json
 from geopy.distance import geodesic
+import random
 
 st.set_page_config(layout="wide")
-st.title("Murang'a University Path Collector")
 
-# Initialize session state
-if "paths" not in st.session_state:
-    st.session_state.paths = {}  # stores all paths
-if "current_path" not in st.session_state:
-    st.session_state.current_path = []  # stores points for current path
-if "path_name" not in st.session_state:
-    st.session_state.path_name = ""
+# --- Initialize session state ---
+if 'paths' not in st.session_state:
+    st.session_state.paths = {}  # path_name -> list of coordinates
+if 'current_path' not in st.session_state:
+    st.session_state.current_path = []
+if 'path_name' not in st.session_state:
+    st.session_state.path_name = ''
+if 'path_colors' not in st.session_state:
+    st.session_state.path_colors = {}
+if 'last_added_points' not in st.session_state:
+    st.session_state.last_added_points = []  # for undo
 
-# Input path name
-st.session_state.path_name = st.text_input("Enter Path Name:", value=st.session_state.path_name)
+st.title("Path Collector - Murang'a University")
 
-# Buttons
-col1, col2, col3 = st.columns(3)
-with col1:
-    add_point = st.button("Add Point Manually")  # optional manual add
-with col2:
-    undo = st.button("Undo Last Point")
-with col3:
-    save_path = st.button("Save Current Path")
+# --- Path name input ---
+st.session_state.path_name = st.text_input("Enter Path Name:", st.session_state.path_name)
 
-download = st.button("Download All Paths")
+# --- Interpolation helper ---
+def interpolate_points(p1, p2, interval_m=10):
+    points = [p1]
+    dist = geodesic(p1, p2).meters
+    if dist <= interval_m:
+        return [p1, p2]
+    num_points = int(dist // interval_m)
+    lat1, lon1 = p1
+    lat2, lon2 = p2
+    for i in range(1, num_points):
+        fraction = i / num_points
+        lat = lat1 + (lat2 - lat1) * fraction
+        lon = lon1 + (lon2 - lon1) * fraction
+        points.append([lat, lon])
+    points.append(p2)
+    return points
 
-# Initialize map
-start_coords = [-0.715917, 37.147006]
-m = folium.Map(location=start_coords, zoom_start=18, tiles=None)
-
-# Satellite as default
+# --- Create map with satellite as default ---
+m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17, tiles=None)
 folium.TileLayer('Esri.WorldImagery', name="Satellite", control=True, show=True).add_to(m)
-# Street map
 folium.TileLayer('OpenStreetMap', name="Street Map", control=True, show=False).add_to(m)
 folium.LayerControl().add_to(m)
 
-# Function to interpolate points every 10 meters
-def interpolate_points(points, interval=10):
-    if len(points) < 2:
-        return points
-    result = [points[0]]
-    for i in range(1, len(points)):
-        start, end = points[i-1], points[i]
-        dist = geodesic(start, end).meters
-        if dist <= interval:
-            result.append(end)
-            continue
-        num = int(dist // interval)
-        lat_step = (end[0] - start[0]) / num
-        lon_step = (end[1] - start[1]) / num
-        for j in range(1, num+1):
-            result.append([start[0] + lat_step*j, start[1] + lon_step*j])
-    return result
+# --- Draw saved paths ---
+for name, pts in st.session_state.paths.items():
+    c = st.session_state.path_colors.get(name, "#0000FF")
+    folium.PolyLine(pts, color=c, weight=4, opacity=0.7).add_to(m)
+    for pt in pts:
+        folium.CircleMarker(location=pt, radius=3, color=c).add_to(m)
 
-# Handle undo
-if undo and st.session_state.current_path:
-    st.session_state.current_path.pop()
-
-# Handle save
-if save_path and st.session_state.path_name:
-    if st.session_state.current_path:
-        st.session_state.paths[st.session_state.path_name] = st.session_state.current_path.copy()
-        st.session_state.current_path = []
-        st.session_state.path_name = ""
-        st.success("Path saved!")
-
-# Handle download
-if download and st.session_state.paths:
-    json_data = json.dumps(st.session_state.paths, indent=4)
-    st.download_button("Download JSON", data=json_data, file_name="paths.json")
-
-# Display existing paths
-for name, path in st.session_state.paths.items():
-    folium.PolyLine(interpolate_points(path), color="blue", weight=3).add_to(m)
-    for pt in path:
-        folium.Marker(location=pt, popup=name).add_to(m)
-
-# Display current path
-for pt in st.session_state.current_path:
-    folium.CircleMarker(location=pt, radius=5, color="red").add_to(m)
+# --- Draw current path ---
 if st.session_state.current_path:
-    folium.PolyLine(interpolate_points(st.session_state.current_path), color="red", weight=3).add_to(m)
+    color = st.session_state.path_colors.get(
+        st.session_state.path_name,
+        "#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6)])
+    )
+    st.session_state.path_colors[st.session_state.path_name] = color
+    folium.PolyLine(st.session_state.current_path, color=color, weight=5).add_to(m)
+    for pt in st.session_state.current_path:
+        folium.CircleMarker(location=pt, radius=3, color=color).add_to(m)
 
-# Capture clicks
-map_data = st_folium(m, height=600, width=1000)
-if map_data and map_data.get("last_clicked"):
-    click_coords = [map_data["last_clicked"]["lat"], map_data["last_clicked"]["lng"]]
-    if not st.session_state.current_path or st.session_state.current_path[-1] != click_coords:
-        st.session_state.current_path.append(click_coords)
+# --- Capture click ---
+clicked = st_folium(m, width=800, height=500)
+if clicked and clicked.get("last_clicked"):
+    point = [clicked["last_clicked"]["lat"], clicked["last_clicked"]["lng"]]
+    added_points = []
+    if st.session_state.current_path:
+        last_point = st.session_state.current_path[-1]
+        interp = interpolate_points(last_point, point)
+        st.session_state.current_path.extend(interp[1:])  # avoid duplicate
+        added_points.extend(interp[1:])
+    else:
+        st.session_state.current_path.append(point)
+        added_points.append(point)
+    st.session_state.last_added_points = added_points
+    st.success(f"Point added: {point}")
 
-st.markdown("**Current Path Points:**")
-st.write(st.session_state.current_path)
+# --- Buttons ---
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("Save Current Path"):
+        if st.session_state.path_name and st.session_state.current_path:
+            st.session_state.paths[st.session_state.path_name] = st.session_state.current_path.copy()
+            st.success(f"Path '{st.session_state.path_name}' saved!")
+            st.session_state.current_path = []
+            st.session_state.path_name = ''
+with col2:
+    if st.button("Download All Paths"):
+        if st.session_state.paths:
+            json_str = json.dumps({"paths": st.session_state.paths}, indent=2)
+            st.download_button("Download JSON", data=json_str, file_name="paths.json", mime="application/json")
+        else:
+            st.warning("No paths to download!")
+with col3:
+    if st.button("Undo Last Point(s)"):
+        if st.session_state.last_added_points:
+            for pt in st.session_state.last_added_points:
+                if pt in st.session_state.current_path:
+                    st.session_state.current_path.remove(pt)
+            st.session_state.last_added_points = []
+            st.success("Last point(s) removed.")
+        else:
+            st.warning("No points to undo!")
