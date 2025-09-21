@@ -5,83 +5,93 @@ import json
 from geopy.distance import geodesic
 
 st.set_page_config(layout="wide")
-st.title("Path Collector - Murang'a University (Satellite View)")
+st.title("Murang'a University Path Collector")
 
 # Initialize session state
 if "paths" not in st.session_state:
-    st.session_state.paths = {}
-if "current_path_name" not in st.session_state:
-    st.session_state.current_path_name = ""
-if "coords" not in st.session_state:
-    st.session_state.coords = []
+    st.session_state.paths = {}  # stores all paths
+if "current_path" not in st.session_state:
+    st.session_state.current_path = []  # stores points for current path
+if "path_name" not in st.session_state:
+    st.session_state.path_name = ""
 
 # Input path name
-path_name = st.text_input("Enter Path Name:", value=st.session_state.current_path_name)
-st.session_state.current_path_name = path_name
+st.session_state.path_name = st.text_input("Enter Path Name:", value=st.session_state.path_name)
 
 # Buttons
 col1, col2, col3 = st.columns(3)
 with col1:
-    save_btn = st.button("Save Current Path")
+    add_point = st.button("Add Point Manually")  # optional manual add
 with col2:
-    undo_btn = st.button("Undo Last Point")
+    undo = st.button("Undo Last Point")
 with col3:
-    download_btn = st.button("Download All Paths")
+    save_path = st.button("Save Current Path")
 
-# Undo last point
-if undo_btn and st.session_state.coords:
-    st.session_state.coords.pop()
+download = st.button("Download All Paths")
 
-# Save current path
-if save_btn and path_name:
-    if st.session_state.coords:
-        st.session_state.paths[path_name] = st.session_state.coords.copy()
-        st.session_state.coords = []
-        st.success(f"Path '{path_name}' saved!")
-    else:
-        st.warning("No points to save!")
+# Initialize map
+start_coords = [-0.715917, 37.147006]
+m = folium.Map(location=start_coords, zoom_start=18, tiles=None)
 
-# Download all paths
-if download_btn:
-    if st.session_state.paths:
-        json_data = json.dumps(st.session_state.paths, indent=2)
-        st.download_button("Download Paths JSON", data=json_data, file_name="paths.json")
-    else:
-        st.warning("No paths to download!")
-
-# --- Create satellite map ---
-m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17, tiles=None)
-folium.TileLayer('Esri.WorldImagery', name="Satellite").add_to(m)
-folium.TileLayer('OpenStreetMap', name="Street Map").add_to(m)
+# Satellite as default
+folium.TileLayer('Esri.WorldImagery', name="Satellite", control=True, show=True).add_to(m)
+# Street map
+folium.TileLayer('OpenStreetMap', name="Street Map", control=True, show=False).add_to(m)
 folium.LayerControl().add_to(m)
 
-# Add existing points
-for name, path_points in st.session_state.paths.items():
-    folium.PolyLine(path_points, color="blue", weight=3).add_to(m)
-    for i, p in enumerate(path_points):
-        folium.Marker(p, popup=f"{name} Point {i+1}").add_to(m)
+# Function to interpolate points every 10 meters
+def interpolate_points(points, interval=10):
+    if len(points) < 2:
+        return points
+    result = [points[0]]
+    for i in range(1, len(points)):
+        start, end = points[i-1], points[i]
+        dist = geodesic(start, end).meters
+        if dist <= interval:
+            result.append(end)
+            continue
+        num = int(dist // interval)
+        lat_step = (end[0] - start[0]) / num
+        lon_step = (end[1] - start[1]) / num
+        for j in range(1, num+1):
+            result.append([start[0] + lat_step*j, start[1] + lon_step*j])
+    return result
 
-# Add current points
-if st.session_state.coords:
-    folium.PolyLine(st.session_state.coords, color="red", weight=3).add_to(m)
-    for i, p in enumerate(st.session_state.coords):
-        folium.Marker(p, popup=f"Current Point {i+1}").add_to(m)
+# Handle undo
+if undo and st.session_state.current_path:
+    st.session_state.current_path.pop()
+
+# Handle save
+if save_path and st.session_state.path_name:
+    if st.session_state.current_path:
+        st.session_state.paths[st.session_state.path_name] = st.session_state.current_path.copy()
+        st.session_state.current_path = []
+        st.session_state.path_name = ""
+        st.success("Path saved!")
+
+# Handle download
+if download and st.session_state.paths:
+    json_data = json.dumps(st.session_state.paths, indent=4)
+    st.download_button("Download JSON", data=json_data, file_name="paths.json")
+
+# Display existing paths
+for name, path in st.session_state.paths.items():
+    folium.PolyLine(interpolate_points(path), color="blue", weight=3).add_to(m)
+    for pt in path:
+        folium.Marker(location=pt, popup=name).add_to(m)
+
+# Display current path
+for pt in st.session_state.current_path:
+    folium.CircleMarker(location=pt, radius=5, color="red").add_to(m)
+if st.session_state.current_path:
+    folium.PolyLine(interpolate_points(st.session_state.current_path), color="red", weight=3).add_to(m)
 
 # Capture clicks
-map_data = st_folium(m, width=800, height=600, returned_objects=["last_clicked"])
-clicked = map_data["last_clicked"]
-if clicked:
-    point = [clicked["lat"], clicked["lng"]]
-    
-    # Optional: interpolate points every 10 meters
-    if st.session_state.coords:
-        last = st.session_state.coords[-1]
-        distance = geodesic(last, point).meters
-        if distance > 10:
-            # Insert intermediate points
-            num_points = int(distance // 10)
-            for i in range(1, num_points + 1):
-                lat = last[0] + (point[0] - last[0]) * (i / (num_points + 1))
-                lng = last[1] + (point[1] - last[1]) * (i / (num_points + 1))
-                st.session_state.coords.append([lat, lng])
-    st.session_state.coords.append(point)
+map_data = st_folium(m, height=600, width=1000)
+if map_data and map_data.get("last_clicked"):
+    click_coords = [map_data["last_clicked"]["lat"], map_data["last_clicked"]["lng"]]
+    if not st.session_state.current_path or st.session_state.current_path[-1] != click_coords:
+        st.session_state.current_path.append(click_coords)
+
+st.markdown("**Current Path Points:**")
+st.write(st.session_state.current_path)
