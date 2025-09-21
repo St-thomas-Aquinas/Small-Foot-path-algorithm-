@@ -16,6 +16,8 @@ if 'path_name' not in st.session_state:
     st.session_state.path_name = ''
 if 'path_colors' not in st.session_state:
     st.session_state.path_colors = {}
+if 'last_added_points' not in st.session_state:
+    st.session_state.last_added_points = []  # for undo
 
 st.title("Path Collector - Murang'a University")
 
@@ -61,16 +63,20 @@ if st.session_state.current_path:
 clicked = st_folium(m, width=800, height=500)
 if clicked and clicked.get("last_clicked"):
     point = [clicked["last_clicked"]["lat"], clicked["last_clicked"]["lng"]]
+    added_points = []
     if st.session_state.current_path:
         last_point = st.session_state.current_path[-1]
         interp = interpolate_points(last_point, point)
         st.session_state.current_path.extend(interp[1:])  # avoid duplicate
+        added_points.extend(interp[1:])
     else:
         st.session_state.current_path.append(point)
-    st.success(f"Point added: {point}")  # show feedback
+        added_points.append(point)
+    st.session_state.last_added_points = added_points
+    st.success(f"Point added: {point}")
 
 # --- Buttons ---
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 with col1:
     if st.button("Save Current Path"):
         if st.session_state.path_name and st.session_state.current_path:
@@ -85,3 +91,13 @@ with col2:
             st.download_button("Download JSON", data=json_str, file_name="paths.json", mime="application/json")
         else:
             st.warning("No paths to download!")
+with col3:
+    if st.button("Undo Last Point(s)"):
+        if st.session_state.last_added_points:
+            for pt in st.session_state.last_added_points:
+                if pt in st.session_state.current_path:
+                    st.session_state.current_path.remove(pt)
+            st.session_state.last_added_points = []
+            st.success("Last point(s) removed.")
+        else:
+            st.warning("No points to undo!")
