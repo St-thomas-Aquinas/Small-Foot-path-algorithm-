@@ -67,7 +67,7 @@ if clicked and clicked.get("last_clicked"):
         st.session_state.current_path.extend(interp[1:])  # avoid duplicate
     else:
         st.session_state.current_path.append(point)
-    st.experimental_rerun()  # re-render map with new point
+    st.success(f"Point added: {point}")  # show feedback
 
 # --- Buttons ---
 col1, col2 = st.columns(2)
