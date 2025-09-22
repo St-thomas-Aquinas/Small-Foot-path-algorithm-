@@ -69,11 +69,10 @@ paths_data = {
         ]
     }
 }
-
 paths = list(paths_data["paths"].values())
 
 # -------------------------
-# Build routing graph
+# Graph functions
 # -------------------------
 def build_graph(paths):
     G = nx.Graph()
@@ -100,48 +99,46 @@ def find_route(paths, current, destination):
 # -------------------------
 # Session state
 # -------------------------
-for key in ["current", "destination", "route", "map"]:
+for key in ["current", "destination", "route"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 # -------------------------
-# Build map once and store in session
+# Build map fresh each run (no cache, avoids flicker)
 # -------------------------
-if st.session_state["map"] is None:
-    m = folium.Map(
-        location=[-0.715917, 37.147006],
-        zoom_start=17,
-        tiles="Esri.WorldImagery"
-    )
-    # Draw all paths initially
-    for path in paths:
-        color = "#" + ''.join(random.choices("0123456789ABCDEF", k=6))
-        folium.PolyLine(path, color=color, weight=3, opacity=0.6).add_to(m)
-    st.session_state["map"] = m
+m = folium.Map(
+    location=[-0.715917, 37.147006],
+    zoom_start=17,
+    tiles="Esri.WorldImagery"
+)
 
-# Work with the saved map
-m = st.session_state["map"]
+# Draw all paths
+for path in paths:
+    color = "#" + ''.join(random.choices("0123456789ABCDEF", k=6))
+    folium.PolyLine(path, color=color, weight=3, opacity=0.6).add_to(m)
 
-# Draw markers and route dynamically
+# Draw current + destination
 if st.session_state.current:
     folium.Marker(st.session_state.current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
 if st.session_state.destination:
     folium.Marker(st.session_state.destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
+
+# Draw computed route
 if st.session_state.route:
     folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
 
-# Show map without forcing rerender
-clicked = st_folium(m, width=800, height=500, returned_objects=[])
+# Show map
+clicked = st_folium(m, width=800, height=500)
 
-# Handle clicks only when not both selected
+# Handle clicks
 if clicked and clicked.get("last_clicked"):
     point = [clicked["last_clicked"]["lat"], clicked["last_clicked"]["lng"]]
     if not st.session_state.current:
         st.session_state.current = point
-        st.success(f"✅ Selected Current Location: {point}")
+        st.success(f"✅ Current location set: {point}")
     elif not st.session_state.destination:
         st.session_state.destination = point
-        st.success(f"✅ Selected Destination: {point}")
+        st.success(f"✅ Destination set: {point}")
 
 # -------------------------
 # Buttons
@@ -154,27 +151,21 @@ with col1:
             if st.session_state.route:
                 st.success("🚀 Route computed successfully!")
             else:
-                st.error("❌ No path found between these points.")
+                st.error("❌ No path found.")
         else:
-            st.warning("⚠️ Please click two points on the map.")
+            st.warning("⚠️ Please select current and destination.")
 
 with col2:
     if st.button("Reset"):
-        for key in ["current", "destination", "route", "map"]:
+        for key in ["current", "destination", "route"]:
             st.session_state[key] = None
-        st.success("🔄 Reset complete!")
+        st.experimental_rerun()
 
 # -------------------------
-# Show Route JSON + Download
+# Show Route JSON
 # -------------------------
 if st.session_state.route:
     route_json = json.dumps({"route": st.session_state.route}, indent=2)
-    st.subheader("📍 Computed Route (JSON)")
+    st.subheader("📍 Computed Route")
     st.code(route_json, language="json")
-
-    st.download_button(
-        label="⬇️ Download Route JSON",
-        data=route_json,
-        file_name="route.json",
-        mime="application/json"
-    )
+    st.download_button("⬇️ Download Route JSON", route_json, "route.json", "application/json")
