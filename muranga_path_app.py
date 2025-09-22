@@ -66,44 +66,44 @@ for key in ["current", "destination", "route", "map"]:
         st.session_state[key] = None
 
 # -------------------------
-# Input form (prevents rerun on typing)
+# Input form
 # -------------------------
-with st.form("coords_form"):
-    current_input = st.text_input("Current Location (lat, lng)", "-0.7151, 37.1474")
-    destination_input = st.text_input("Destination Location (lat, lng)", "-0.7149, 37.1507")
-    submitted = st.form_submit_button("Compute Route")
+if st.session_state.map is None:  # Only show inputs if no map yet
+    with st.form("coords_form"):
+        current_input = st.text_input("Current Location (lat, lng)", "-0.7151, 37.1474")
+        destination_input = st.text_input("Destination Location (lat, lng)", "-0.7149, 37.1507")
+        submitted = st.form_submit_button("Compute Route")
 
-# -------------------------
-# Handle form submit
-# -------------------------
-if submitted:
-    try:
-        current = [float(x.strip()) for x in current_input.split(",")]
-        destination = [float(x.strip()) for x in destination_input.split(",")]
-        st.session_state.current = current
-        st.session_state.destination = destination
-        st.session_state.route = find_route(paths, current, destination)
+    if submitted:
+        try:
+            current = [float(x.strip()) for x in current_input.split(",")]
+            destination = [float(x.strip()) for x in destination_input.split(",")]
+            st.session_state.current = current
+            st.session_state.destination = destination
+            st.session_state.route = find_route(paths, current, destination)
 
-        # Build map ONCE
-        m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17, tiles="OpenStreetMap")
+            # Build map ONCE
+            m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17, tiles="OpenStreetMap")
 
-        # Draw base paths
-        colors = ["red", "green", "orange", "purple", "brown"]
-        for idx, path in enumerate(paths):
-            folium.PolyLine(path, color=colors[idx % len(colors)], weight=3, opacity=0.6).add_to(m)
+            # Draw paths
+            for path in paths:
+                folium.PolyLine(path, color="gray", weight=2, opacity=0.5).add_to(m)
 
-        # Markers
-        folium.Marker(current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
-        folium.Marker(destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
+            # Markers
+            folium.Marker(current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
+            folium.Marker(destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
 
-        # Route
-        if st.session_state.route:
-            folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
+            # Route
+            if st.session_state.route:
+                folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
+                st.success("🚀 Route computed successfully!")
+            else:
+                st.error("❌ No path found between these points.")
 
-        st.session_state.map = m
-        st.success("🚀 Route computed successfully!")
-    except Exception as e:
-        st.error(f"Invalid input: {e}")
+            # Save static map in session
+            st.session_state.map = m
+        except Exception as e:
+            st.error(f"Invalid input: {e}")
 
 # -------------------------
 # Reset button
