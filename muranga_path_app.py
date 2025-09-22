@@ -1,9 +1,9 @@
 import streamlit as st
 import folium
-from streamlit_folium import st_folium
 import networkx as nx
 from geopy.distance import geodesic
 import json
+import os
 
 st.set_page_config(layout="wide")
 st.title("Smart Path Router - Murang'a University")
@@ -61,14 +61,14 @@ def find_route(paths, current, destination):
 # -------------------------
 # Session state init
 # -------------------------
-for key in ["current", "destination", "route", "map"]:
+for key in ["current", "destination", "route", "map_file"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 # -------------------------
 # Input form
 # -------------------------
-if st.session_state.map is None:  # Only show inputs if no map yet
+if st.session_state.map_file is None:
     with st.form("coords_form"):
         current_input = st.text_input("Current Location (lat, lng)", "-0.7151, 37.1474")
         destination_input = st.text_input("Destination Location (lat, lng)", "-0.7149, 37.1507")
@@ -82,7 +82,7 @@ if st.session_state.map is None:  # Only show inputs if no map yet
             st.session_state.destination = destination
             st.session_state.route = find_route(paths, current, destination)
 
-            # Build map ONCE
+            # Build folium map (OpenStreetMap tiles)
             m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17, tiles="OpenStreetMap")
 
             # Draw paths
@@ -100,8 +100,11 @@ if st.session_state.map is None:  # Only show inputs if no map yet
             else:
                 st.error("❌ No path found between these points.")
 
-            # Save static map in session
-            st.session_state.map = m
+            # Save map to HTML (static)
+            map_file = "map.html"
+            m.save(map_file)
+            st.session_state.map_file = map_file
+
         except Exception as e:
             st.error(f"Invalid input: {e}")
 
@@ -109,15 +112,17 @@ if st.session_state.map is None:  # Only show inputs if no map yet
 # Reset button
 # -------------------------
 if st.button("Reset"):
-    for key in ["current", "destination", "route", "map"]:
+    for key in ["current", "destination", "route", "map_file"]:
         st.session_state[key] = None
     st.success("🔄 Reset complete!")
 
 # -------------------------
-# Show map
+# Show static map
 # -------------------------
-if st.session_state.map:
-    st_folium(st.session_state.map, width=800, height=500)
+if st.session_state.map_file and os.path.exists(st.session_state.map_file):
+    with open(st.session_state.map_file, "r", encoding="utf-8") as f:
+        map_html = f.read()
+    st.components.v1.html(map_html, height=500)
 
 # -------------------------
 # Show Route JSON
