@@ -98,83 +98,61 @@ def find_route(paths, current, destination):
         return None
 
 # -------------------------
-# Session state
+# User Input
 # -------------------------
-for key in ["current", "destination", "route", "map"]:
-    if key not in st.session_state:
-        st.session_state[key] = None
+st.subheader("Enter Coordinates")
 
-# -------------------------
-# Build map once and store in session
-# -------------------------
-if st.session_state["map"] is None:
-    m = folium.Map(
-        location=[-0.715917, 37.147006],
-        zoom_start=17,
-        tiles="Esri.WorldImagery"
-    )
-    # Draw all paths initially
-    for path in paths:
-        color = "#" + ''.join(random.choices("0123456789ABCDEF", k=6))
-        folium.PolyLine(path, color=color, weight=3, opacity=0.6).add_to(m)
-    st.session_state["map"] = m
+current_input = st.text_input("Current Location (lat, lng)", "-0.7151, 37.1474")
+destination_input = st.text_input("Destination Location (lat, lng)", "-0.7149, 37.1507")
 
-# Work with the saved map
-m = st.session_state["map"]
-
-# Draw markers and route dynamically
-if st.session_state.current:
-    folium.Marker(st.session_state.current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
-if st.session_state.destination:
-    folium.Marker(st.session_state.destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
-if st.session_state.route:
-    folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
-
-# Show map without forcing rerender
-clicked = st_folium(m, width=800, height=500, returned_objects=[])
-
-# Handle clicks only when not both selected
-if clicked and clicked.get("last_clicked"):
-    point = [clicked["last_clicked"]["lat"], clicked["last_clicked"]["lng"]]
-    if not st.session_state.current:
-        st.session_state.current = point
-        st.success(f"✅ Selected Current Location: {point}")
-    elif not st.session_state.destination:
-        st.session_state.destination = point
-        st.success(f"✅ Selected Destination: {point}")
+try:
+    current = [float(x.strip()) for x in current_input.split(",")]
+    destination = [float(x.strip()) for x in destination_input.split(",")]
+except:
+    st.error("⚠️ Please enter valid coordinates in format: lat, lng")
+    current, destination = None, None
 
 # -------------------------
-# Buttons
+# Map Setup
 # -------------------------
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Compute Route"):
-        if st.session_state.current and st.session_state.destination:
-            st.session_state.route = find_route(paths, st.session_state.current, st.session_state.destination)
-            if st.session_state.route:
-                st.success("🚀 Route computed successfully!")
-            else:
-                st.error("❌ No path found between these points.")
+m = folium.Map(
+    location=[-0.715917, 37.147006],
+    zoom_start=17,
+    tiles="Esri.WorldImagery"
+)
+
+# Draw all paths
+for path in paths:
+    color = "#" + ''.join(random.choices("0123456789ABCDEF", k=6))
+    folium.PolyLine(path, color=color, weight=3, opacity=0.6).add_to(m)
+
+# -------------------------
+# Compute Route
+# -------------------------
+if st.button("Compute Route"):
+    if current and destination:
+        route = find_route(paths, current, destination)
+        if route:
+            folium.Marker(current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
+            folium.Marker(destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
+            folium.PolyLine(route, color="blue", weight=6, opacity=0.9).add_to(m)
+
+            st.success("🚀 Route computed successfully!")
+
+            route_json = json.dumps({"route": route}, indent=2)
+            st.subheader("📍 Computed Route (JSON)")
+            st.code(route_json, language="json")
+
+            st.download_button(
+                label="⬇️ Download Route JSON",
+                data=route_json,
+                file_name="route.json",
+                mime="application/json"
+            )
         else:
-            st.warning("⚠️ Please click two points on the map.")
-
-with col2:
-    if st.button("Reset"):
-        for key in ["current", "destination", "route", "map"]:
-            st.session_state[key] = None
-        st.success("🔄 Reset complete!")
+            st.error("❌ No path found between these points.")
 
 # -------------------------
-# Show Route JSON + Download
+# Show Map
 # -------------------------
-if st.session_state.route:
-    route_json = json.dumps({"route": st.session_state.route}, indent=2)
-    st.subheader("📍 Computed Route (JSON)")
-    st.code(route_json, language="json")
-
-    st.download_button(
-        label="⬇️ Download Route JSON",
-        data=route_json,
-        file_name="route.json",
-        mime="application/json"
-    )
+st_folium(m, width=800, height=500)
