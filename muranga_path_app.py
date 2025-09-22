@@ -10,7 +10,7 @@ st.set_page_config(layout="wide")
 st.title("Smart Path Router - Murang'a University")
 
 # -------------------------
-# Path data (your provided paths only)
+# Path data (hardcoded)
 # -------------------------
 paths_data = {
     "paths": {
@@ -100,32 +100,20 @@ def find_route(paths, current, destination):
 # -------------------------
 # Session state
 # -------------------------
-for key in ["current", "destination", "route", "map_drawn"]:
+for key in ["current", "destination", "route", "map"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 # -------------------------
-# User input
+# Only draw map AFTER route is computed
 # -------------------------
-st.subheader("📍 Input Coordinates")
-col1, col2 = st.columns(2)
-with col1:
-    current_lat = st.number_input("Current Latitude", value=-0.7159)
-    current_lng = st.number_input("Current Longitude", value=37.1470)
-with col2:
-    dest_lat = st.number_input("Destination Latitude", value=-0.7149)
-    dest_lng = st.number_input("Destination Longitude", value=37.1507)
-
-if st.button("Compute Route"):
-    st.session_state.current = [current_lat, current_lng]
-    st.session_state.destination = [dest_lat, dest_lng]
-    st.session_state.route = find_route(paths, st.session_state.current, st.session_state.destination)
-
-    if st.session_state.route:
-        st.success("🚀 Route computed successfully!")
-        # Draw static map once
-        m = folium.Map(location=st.session_state.current, zoom_start=17, tiles="OpenStreetMap")
-
+if st.session_state.route:
+    if st.session_state.map is None:
+        m = folium.Map(
+            location=st.session_state.current,
+            zoom_start=17,
+            tiles="OpenStreetMap"   # switched from Esri to OSM
+        )
         # Draw all paths
         for path in paths:
             color = "#" + ''.join(random.choices("0123456789ABCDEF", k=6))
@@ -135,19 +123,37 @@ if st.button("Compute Route"):
         folium.Marker(st.session_state.current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
         folium.Marker(st.session_state.destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
 
-        # Route line
+        # Route
         folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
 
-        # Save map to session (static)
-        st.session_state.map_drawn = m
-    else:
-        st.error("❌ No path found.")
+        st.session_state.map = m
 
-if st.session_state.map_drawn:
-    st_folium(st.session_state.map_drawn, width=800, height=500, returned_objects=[])
+    st_folium(st.session_state.map, width=800, height=500, returned_objects=[])
 
 # -------------------------
-# Route JSON + Download
+# Buttons
+# -------------------------
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("Compute Route"):
+        if st.session_state.current and st.session_state.destination:
+            st.session_state.route = find_route(paths, st.session_state.current, st.session_state.destination)
+            if st.session_state.route:
+                st.success("🚀 Route computed successfully!")
+                st.session_state.map = None  # force redraw once with route
+            else:
+                st.error("❌ No path found between these points.")
+        else:
+            st.warning("⚠️ Please select start and end points.")
+
+with col2:
+    if st.button("Reset"):
+        for key in ["current", "destination", "route", "map"]:
+            st.session_state[key] = None
+        st.success("🔄 Reset complete!")
+
+# -------------------------
+# Show Route JSON + Download
 # -------------------------
 if st.session_state.route:
     route_json = json.dumps({"route": st.session_state.route}, indent=2)
