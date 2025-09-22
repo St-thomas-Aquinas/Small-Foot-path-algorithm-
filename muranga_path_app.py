@@ -59,36 +59,27 @@ def find_route(paths, current, destination):
         return None
 
 # -------------------------
-# Session state
+# Session state init
 # -------------------------
-if "route" not in st.session_state:
-    st.session_state.route = None
-if "current" not in st.session_state:
-    st.session_state.current = None
-if "destination" not in st.session_state:
-    st.session_state.destination = None
-if "map" not in st.session_state:   # ✅ persist the map itself
-    st.session_state.map = None
+for key in ["current", "destination", "route", "map"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
 
 # -------------------------
-# User Input
+# Input form (prevents rerun on typing)
 # -------------------------
-st.subheader("Enter Coordinates")
-
-current_input = st.text_input("Current Location (lat, lng)", "-0.7151, 37.1474")
-destination_input = st.text_input("Destination Location (lat, lng)", "-0.7149, 37.1507")
-
-try:
-    current = [float(x.strip()) for x in current_input.split(",")]
-    destination = [float(x.strip()) for x in destination_input.split(",")]
-except:
-    current, destination = None, None
+with st.form("coords_form"):
+    current_input = st.text_input("Current Location (lat, lng)", "-0.7151, 37.1474")
+    destination_input = st.text_input("Destination Location (lat, lng)", "-0.7149, 37.1507")
+    submitted = st.form_submit_button("Compute Route")
 
 # -------------------------
-# Buttons
+# Handle form submit
 # -------------------------
-if st.button("Compute Route"):
-    if current and destination:
+if submitted:
+    try:
+        current = [float(x.strip()) for x in current_input.split(",")]
+        destination = [float(x.strip()) for x in destination_input.split(",")]
         st.session_state.current = current
         st.session_state.destination = destination
         st.session_state.route = find_route(paths, current, destination)
@@ -96,29 +87,34 @@ if st.button("Compute Route"):
         # Build map ONCE
         m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17, tiles="OpenStreetMap")
 
-        # Draw paths (fixed colors, no random)
+        # Draw base paths
         colors = ["red", "green", "orange", "purple", "brown"]
         for idx, path in enumerate(paths):
             folium.PolyLine(path, color=colors[idx % len(colors)], weight=3, opacity=0.6).add_to(m)
 
-        # Add markers
+        # Markers
         folium.Marker(current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
         folium.Marker(destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
 
-        # Add route if found
+        # Route
         if st.session_state.route:
             folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
 
-        st.session_state.map = m  # ✅ save map so it doesn’t redraw randomly
-
-if st.button("Reset"):
-    st.session_state.current = None
-    st.session_state.destination = None
-    st.session_state.route = None
-    st.session_state.map = None
+        st.session_state.map = m
+        st.success("🚀 Route computed successfully!")
+    except Exception as e:
+        st.error(f"Invalid input: {e}")
 
 # -------------------------
-# Show Map
+# Reset button
+# -------------------------
+if st.button("Reset"):
+    for key in ["current", "destination", "route", "map"]:
+        st.session_state[key] = None
+    st.success("🔄 Reset complete!")
+
+# -------------------------
+# Show map
 # -------------------------
 if st.session_state.map:
     st_folium(st.session_state.map, width=800, height=500)
