@@ -856,7 +856,7 @@ paths_data = {
       }
     
 
-
+  # keep your full paths here
 paths = list(paths_data["paths"].values())
 
 # -------------------------
@@ -892,7 +892,7 @@ for key in ["current", "destination", "route", "map_file"]:
         st.session_state[key] = None
 
 # -------------------------
-# Input form
+# Input form (only show if no map yet)
 # -------------------------
 if st.session_state.map_file is None:
     with st.form("coords_form"):
@@ -948,7 +948,8 @@ if st.button("Reset"):
 if st.session_state.map_file and os.path.exists(st.session_state.map_file):
     with open(st.session_state.map_file, "r", encoding="utf-8") as f:
         map_html = f.read()
-    st.components.v1.html(map_html, height=500)
+    # 🚨 Show only static HTML, no refresh flicker
+    st.components.v1.html(map_html, height=500, scrolling=False)
 
 # -------------------------
 # Show Route JSON
