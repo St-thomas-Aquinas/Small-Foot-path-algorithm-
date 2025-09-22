@@ -1,9 +1,9 @@
 import streamlit as st
 import folium
-import networkx as nx
+from streamlit_folium import st_folium
 from geopy.distance import geodesic
+import random
 import json
-import os
 
 st.set_page_config(layout="wide")
 st.title("Smart Path Router - Murang'a University")
@@ -11,7 +11,7 @@ st.title("Smart Path Router - Murang'a University")
 # -------------------------
 # Path data (hardcoded)
 # -------------------------
-paths_data = {
+paths_data ={
   "paths": {
     "path_1": [
       [
@@ -856,108 +856,123 @@ paths_data = {
       }
     
 
-  # keep your full paths here
+
+
 paths = list(paths_data["paths"].values())
 
 # -------------------------
-# Graph utilities
+# Greedy path-chaining algorithm
 # -------------------------
-def build_graph(paths):
-    G = nx.Graph()
-    for path in paths:
-        for i in range(len(path) - 1):
-            p1, p2 = tuple(path[i]), tuple(path[i + 1])
-            dist = geodesic(p1, p2).meters
-            G.add_edge(p1, p2, weight=dist)
-    return G
-
-def nearest_node(point, graph):
-    return min(graph.nodes, key=lambda n: geodesic(point, n).meters)
-
 def find_route(paths, current, destination):
-    G = build_graph(paths)
-    start = nearest_node(current, G)
-    end = nearest_node(destination, G)
-    try:
-        route = nx.shortest_path(G, start, end, weight="weight")
-        return [current] + route + [destination]
-    except nx.NetworkXNoPath:
-        return None
+    def path_end(path):
+        return path[-1]
+
+    def distance(a, b):
+        return geodesic(a, b).meters
+
+    # Step 1: Pick the path whose end is closest to destination
+    chosen = min(paths, key=lambda p: distance(path_end(p), destination))
+    route = [current] + chosen
+
+    visited = set()
+    visited.add(tuple(path_end(chosen)))
+
+    # Step 2: Keep chaining until we reach close to destination
+    while True:
+        last_point = path_end(chosen)
+
+        # Stop if already close enough
+        if distance(last_point, destination) < 5:  # tolerance
+            break
+
+        # Pick next path whose end is closest to destination
+        candidates = [p for p in paths if tuple(path_end(p)) not in visited]
+        if not candidates:
+            break
+
+        chosen = min(candidates, key=lambda p: distance(path_end(p), destination))
+        route += chosen
+        visited.add(tuple(path_end(chosen)))
+
+    # Step 3: Connect to destination
+    route.append(destination)
+    return route
 
 # -------------------------
-# Session state init
+# Session state
 # -------------------------
-for key in ["current", "destination", "route", "map_file"]:
+for key in ["current", "destination", "route", "map"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 # -------------------------
-# Input form (only show if no map yet)
+# Build map once and store in session
 # -------------------------
-if st.session_state.map_file is None:
-    with st.form("coords_form"):
-        current_input = st.text_input("Current Location (lat, lng)", "-0.7151, 37.1474")
-        destination_input = st.text_input("Destination Location (lat, lng)", "-0.7149, 37.1507")
-        submitted = st.form_submit_button("Compute Route")
+if st.session_state["map"] is None:
+    m = folium.Map(
+        location=[-0.715917, 37.147006],
+        zoom_start=17,
+        tiles="OpenStreetMap"  # switched to OSM for clarity
+    )
+    # Draw all paths initially
+    for path in paths:
+        color = "#" + ''.join(random.choices("0123456789ABCDEF", k=6))
+        folium.PolyLine(path, color=color, weight=3, opacity=0.6).add_to(m)
+    st.session_state["map"] = m
 
-    if submitted:
-        try:
-            current = [float(x.strip()) for x in current_input.split(",")]
-            destination = [float(x.strip()) for x in destination_input.split(",")]
-            st.session_state.current = current
-            st.session_state.destination = destination
-            st.session_state.route = find_route(paths, current, destination)
+# Work with saved map
+m = st.session_state["map"]
 
-            # Build folium map (OpenStreetMap tiles)
-            m = folium.Map(location=[-0.715917, 37.147006], zoom_start=17, tiles="OpenStreetMap")
+# Draw markers and route
+if st.session_state.current:
+    folium.Marker(st.session_state.current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
+if st.session_state.destination:
+    folium.Marker(st.session_state.destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
+if st.session_state.route:
+    folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
 
-            # Draw paths
-            for path in paths:
-                folium.PolyLine(path, color="gray", weight=2, opacity=0.5).add_to(m)
+# Show map
+clicked = st_folium(m, width=800, height=500, returned_objects=[])
 
-            # Markers
-            folium.Marker(current, popup="Current", icon=folium.Icon(color="green")).add_to(m)
-            folium.Marker(destination, popup="Destination", icon=folium.Icon(color="red")).add_to(m)
+# Handle clicks
+if clicked and clicked.get("last_clicked"):
+    point = [clicked["last_clicked"]["lat"], clicked["last_clicked"]["lng"]]
+    if not st.session_state.current:
+        st.session_state.current = point
+        st.success(f"✅ Selected Current Location: {point}")
+    elif not st.session_state.destination:
+        st.session_state.destination = point
+        st.success(f"✅ Selected Destination: {point}")
 
-            # Route
+# -------------------------
+# Buttons
+# -------------------------
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("Compute Route"):
+        if st.session_state.current and st.session_state.destination:
+            st.session_state.route = find_route(paths, st.session_state.current, st.session_state.destination)
             if st.session_state.route:
-                folium.PolyLine(st.session_state.route, color="blue", weight=6, opacity=0.9).add_to(m)
                 st.success("🚀 Route computed successfully!")
             else:
                 st.error("❌ No path found between these points.")
+        else:
+            st.warning("⚠️ Please click two points on the map.")
 
-            # Save map to HTML (static)
-            map_file = "map.html"
-            m.save(map_file)
-            st.session_state.map_file = map_file
-
-        except Exception as e:
-            st.error(f"Invalid input: {e}")
-
-# -------------------------
-# Reset button
-# -------------------------
-if st.button("Reset"):
-    for key in ["current", "destination", "route", "map_file"]:
-        st.session_state[key] = None
-    st.success("🔄 Reset complete!")
+with col2:
+    if st.button("Reset"):
+        for key in ["current", "destination", "route", "map"]:
+            st.session_state[key] = None
+        st.success("🔄 Reset complete!")
 
 # -------------------------
-# Show static map
-# -------------------------
-if st.session_state.map_file and os.path.exists(st.session_state.map_file):
-    with open(st.session_state.map_file, "r", encoding="utf-8") as f:
-        map_html = f.read()
-    # 🚨 Show only static HTML, no refresh flicker
-    st.components.v1.html(map_html, height=500, scrolling=False)
-
-# -------------------------
-# Show Route JSON
+# Show Route JSON + Download
 # -------------------------
 if st.session_state.route:
     route_json = json.dumps({"route": st.session_state.route}, indent=2)
     st.subheader("📍 Computed Route (JSON)")
     st.code(route_json, language="json")
+
     st.download_button(
         label="⬇️ Download Route JSON",
         data=route_json,
