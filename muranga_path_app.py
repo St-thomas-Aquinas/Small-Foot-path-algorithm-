@@ -4,6 +4,7 @@ from streamlit_folium import st_folium
 import networkx as nx
 from geopy.distance import geodesic
 import random
+import json
 
 st.set_page_config(layout="wide")
 st.title("Smart Path Router - Murang'a University")
@@ -162,4 +163,19 @@ with col2:
         st.session_state.current = None
         st.session_state.destination = None
         st.session_state.route = None
-        st.experimental_rerun()
+        st.success("🔄 Reset complete!")
+
+# -------------------------
+# Show Route JSON + Download
+# -------------------------
+if st.session_state.route:
+    route_json = json.dumps({"route": st.session_state.route}, indent=2)
+    st.subheader("📍 Computed Route (JSON)")
+    st.code(route_json, language="json")
+
+    st.download_button(
+        label="⬇️ Download Route JSON",
+        data=route_json,
+        file_name="route.json",
+        mime="application/json"
+    )
