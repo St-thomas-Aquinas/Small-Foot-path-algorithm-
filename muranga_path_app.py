@@ -1,6 +1,3 @@
-# Install required packages if not already
-# !pip install streamlit folium streamlit-folium
-
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
@@ -28,11 +25,15 @@ except Exception as e:
     st.stop()
 
 # -------------------------------
-# Create Folium Map
+# Create Folium Map with OpenStreetMap tiles
 # -------------------------------
 if path_coords:
     # Center map at first coordinate
-    m = folium.Map(location=[path_coords[0][1], path_coords[0][0]], zoom_start=18)  # lat, lon order
+    m = folium.Map(
+        location=[path_coords[0][1], path_coords[0][0]], 
+        zoom_start=18, 
+        tiles="OpenStreetMap"  # <- Use real-world OpenStreetMap tiles
+    )
 
     # Plot the path as a line
     lats, lons = zip(*path_coords)
